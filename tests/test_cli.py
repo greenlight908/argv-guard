@@ -7,6 +7,7 @@ reported as "I looked and it is fine".
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -124,3 +125,32 @@ class TestTheCountOnlyClaimsWhatItMeasured:
         main([str(tmp_path)])
         err = capsys.readouterr().err
         assert "1 in 2 shell script(s) swept" in err
+
+
+class TestAnUnreadableFileIsUntrusted:
+    def test_an_unreadable_file_exits_two_not_zero(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Exit 0 would tell pre-commit the commit is clean on a file never opened.
+
+        A NON-EXISTENT path is the wrong fixture and the first version used one:
+        `shell_files` drops it before the scan, so the test passed for a reason with
+        nothing to do with readability. The real shape is a file that EXISTS, is
+        recognised as shell by its suffix (so nothing opens it first), and then fails
+        to read.
+        """
+        _script(tmp_path / "fine.sh", "#!/bin/bash\necho hi\n")
+        locked = _script(tmp_path / "locked.sh", "#!/bin/bash\necho hi\n")
+        locked.chmod(0o000)
+        if os.access(locked, os.R_OK):  # running as root: nothing is unreadable
+            pytest.skip("cannot make a file unreadable as this user")
+
+        try:
+            assert main([str(tmp_path / "fine.sh"), str(locked)]) == 2
+            err = capsys.readouterr().err
+            assert "could NOT READ" in err
+            assert "cannot be reported as clean" in err
+        finally:
+            locked.chmod(0o644)
+
+    def test_the_control_all_readable_and_clean_exits_zero(self, tmp_path: Path):
+        path = _script(tmp_path / "fine.sh", "#!/bin/bash\necho hi\n")
+        assert main([str(path)]) == 0

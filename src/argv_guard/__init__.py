@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .scanner import (
     Finding,
+    ScanResult,
     is_secret_name,
     is_shell_file,
     logical_lines,
@@ -19,6 +20,7 @@ from .scanner import (
 
 __all__ = [
     "Finding",
+    "ScanResult",
     "__version__",
     "is_secret_name",
     "is_shell_file",

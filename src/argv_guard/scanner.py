@@ -50,6 +50,7 @@ import os
 import re
 from collections.abc import Iterable
 from pathlib import Path
+from typing import NamedTuple
 
 # Commands that put their arguments in a NEW process's argv. `printf`/`echo` are absent on
 # purpose: they are shell builtins, fork nothing, and are precisely the safe way to hand a
@@ -374,13 +375,35 @@ def scan_text(text: str, path: Path) -> list[Finding]:
     return [Finding(path, number, var) for number, line in logical_lines(text) for var in offending_vars(line)]
 
 
-def scan(paths: Iterable[Path]) -> list[Finding]:
-    """Findings across already-enumerated shell scripts."""
+class ScanResult(NamedTuple):
+    """What a scan found, AND what it could not look at.
+
+    The second half is the point. An earlier version returned bare findings and swallowed
+    per-file `OSError`s, so a script that could not be read was indistinguishable from a
+    clean one -- it still counted toward "N scripts scanned" while never being examined,
+    and a caller could report the whole sweep clean on the strength of it. "I could not
+    look" must never reach the caller as "I looked and it is fine", so unreadable paths
+    are RETURNED and the caller is forced to decide what they mean.
+    """
+
+    findings: list[Finding]
+    unreadable: list[tuple[Path, str]]
+
+    @property
+    def trustworthy(self) -> bool:
+        """True when every requested path was actually read."""
+        return not self.unreadable
+
+
+def scan(paths: Iterable[Path]) -> ScanResult:
+    """Findings across already-enumerated shell scripts, plus what could not be read."""
     findings: list[Finding] = []
+    unreadable: list[tuple[Path, str]] = []
     for path in paths:
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        except OSError as exc:
+            unreadable.append((path, exc.strerror or str(exc)))
             continue
         findings.extend(scan_text(text, path))
-    return findings
+    return ScanResult(findings, unreadable)

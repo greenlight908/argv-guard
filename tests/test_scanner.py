@@ -311,7 +311,7 @@ class TestScan:
             '#!/bin/bash\necho ok\ncurl -H "Bearer $API_TOKEN" example.com\n',
             encoding="utf-8",
         )
-        findings = guard.scan([path])
+        findings = guard.scan([path]).findings
         assert len(findings) == 1
         assert findings[0].line == 3
         assert findings[0].var == "API_TOKEN"
@@ -323,7 +323,7 @@ class TestScan:
             '#!/bin/bash\nprintf \'header = "Authorization: Bearer %s"\\n\' "$API_TOKEN" | curl --config -\n',
             encoding="utf-8",
         )
-        assert guard.scan([path]) == []
+        assert guard.scan([path]).findings == []
 
 
 class TestNestedCheckoutsArePruned:
@@ -364,3 +364,44 @@ class TestNestedCheckoutsArePruned:
         (tmp_path / "src" / "nested.sh").write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
         found = guard.shell_files([tmp_path])
         assert [p.relative_to(tmp_path).as_posix() for p in found] == ["src/nested.sh"]
+
+
+class TestAnUnreadableFileIsNotACleanFile:
+    """`scan()` used to swallow per-file `OSError` and carry on.
+
+    That made an unreadable script indistinguishable from a clean one: it still counted
+    toward "N scripts scanned" while never being examined, so a caller could report a
+    whole sweep clean on the strength of a file it had never opened. Raised on review --
+    the same false green as the repo-level case, one level further down.
+    """
+
+    def test_an_unreadable_file_is_reported_not_skipped(self, tmp_path: Path):
+        readable = tmp_path / "fine.sh"
+        readable.write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
+        missing = tmp_path / "gone.sh"  # never created -- read raises
+
+        result = guard.scan([readable, missing])
+
+        assert result.findings == []
+        assert [p for p, _ in result.unreadable] == [missing]
+        assert result.trustworthy is False
+
+    def test_a_fully_readable_scan_is_trustworthy(self, tmp_path: Path):
+        """The control: without it, a scan that always reported unreadable would pass."""
+        path = tmp_path / "fine.sh"
+        path.write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
+
+        result = guard.scan([path])
+
+        assert result.unreadable == []
+        assert result.trustworthy is True
+
+    def test_findings_survive_alongside_an_unreadable_file(self, tmp_path: Path):
+        """A real leak must not be dropped just because a sibling could not be read."""
+        leak = tmp_path / "leak.sh"
+        leak.write_text('#!/bin/bash\ncurl -H "Bearer $API_TOKEN" example.com\n', encoding="utf-8")
+
+        result = guard.scan([leak, tmp_path / "gone.sh"])
+
+        assert [f.var for f in result.findings] == ["API_TOKEN"]
+        assert result.trustworthy is False

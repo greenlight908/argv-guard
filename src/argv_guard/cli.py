@@ -67,7 +67,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    findings = scan(files)
+    result = scan(files)
+
+    # A file we could not read is a file we did not check. Reporting the rest as clean
+    # would make an unreadable script indistinguishable from a safe one -- so this is
+    # exit 2 (untrusted), never exit 0, whether or not the readable files were clean.
+    if result.unreadable:
+        print(
+            f"check-no-secrets-in-argv: could NOT READ {len(result.unreadable)} of {len(files)} shell script(s), so this scan cannot be reported as clean:",
+            file=sys.stderr,
+        )
+        for path, reason in result.unreadable:
+            print(f"    {path}: {reason}", file=sys.stderr)
+        for finding in result.findings:
+            print(finding.message(), file=sys.stderr)
+        return 2
+
+    findings = result.findings
     if not findings:
         return 0
 

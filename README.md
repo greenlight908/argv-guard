@@ -22,7 +22,7 @@ printf 'url = "%s"\n' "https://api.example.com/bot$BOT_TOKEN/send" \
 ```yaml
 repos:
   - repo: https://github.com/greenlight908/argv-guard
-    rev: v0.1.0
+    rev: v0.2.0
     hooks:
       - id: check-no-secrets-in-argv
 ```
@@ -67,7 +67,7 @@ an argument does not silence a genuine leak beside it.
 |------|---------|
 | `0`  | Clean — the scanned scripts pass |
 | `1`  | Findings — at least one secret reaches argv |
-| `2`  | The scan could not be trusted (no paths given, or a directory yielded no shell scripts) |
+| `2`  | The scan could not be trusted (no paths given, a directory yielded no shell scripts, or a file could not be read) |
 
 The failure header reports a census (`N in M shell script(s) swept`) only for a directory
 sweep, which genuinely is one. Given an explicit file list it says `N in the file(s)
