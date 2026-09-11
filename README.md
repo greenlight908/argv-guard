@@ -69,6 +69,11 @@ an argument does not silence a genuine leak beside it.
 | `1`  | Findings — at least one secret reaches argv |
 | `2`  | The scan could not be trusted (no paths given, or a directory yielded no shell scripts) |
 
+The failure header reports a census (`N in M shell script(s) swept`) only for a directory
+sweep, which genuinely is one. Given an explicit file list it says `N in the file(s)
+checked` instead — pre-commit splits staged files across several invocations, so a
+scan-wide count printed from one of them would describe that batch rather than the tree.
+
 Code `2` exists because *"I could not look"* must never be reported as *"I looked and it
 is fine"*. A directory sweep that finds nothing to scan is blindness; an explicit file
 list that contains no shell is the ordinary case and exits `0`.
