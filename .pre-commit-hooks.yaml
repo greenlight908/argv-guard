@@ -1,0 +1,21 @@
+# Hooks this package exposes to CONSUMERS via pre-commit's remote-repo mechanism.
+# A repo enables commit-time enforcement with:
+#
+#   - repo: https://github.com/greenlight908/argv-guard
+#     rev: v0.1.0
+#     hooks:
+#       - id: check-no-secrets-in-argv
+#
+# (This is distinct from .pre-commit-config.yaml, which is THIS repo's own dev hooks.)
+- id: check-no-secrets-in-argv
+  name: Check no secret reaches a spawned process's argv
+  description: Fail if a credential-shaped variable is passed as an argument to a spawned process in a shell script, where /proc/<pid>/cmdline exposes it to every local user.
+  entry: check-no-secrets-in-argv
+  language: python
+  # NO `types:`/`files:` narrowing, deliberately. pre-commit's `shell` type is decided by
+  # identify, which tags neither an extensionless script nor a `*.sh.tpl` template -- and
+  # both of those are real deployed shell in the wild. `files:` cannot express "shell type
+  # OR one of these name shapes" either, since pre-commit ANDs the two. So every staged
+  # file is offered, and the package's own `is_shell_file` (suffix, embedded `.sh.`, or a
+  # shell shebang) makes the call. Reading 200 bytes per staged file is cheap; missing a
+  # deployed script because identify did not recognise it is not.

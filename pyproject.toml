@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "argv-guard"
+version = "0.1.0"
+description = "Pre-commit hook: fail if a secret-shaped variable reaches a spawned process's argv in a shell script."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "greenlight" }]
+keywords = ["pre-commit", "security", "secrets", "shell", "static-analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+# Zero runtime dependencies -- stdlib only, so it installs trivially in any CI runner.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/greenlight908/argv-guard"
+Issues = "https://github.com/greenlight908/argv-guard/issues"
+
+# The pre-commit hook's entry point (see .pre-commit-hooks.yaml). Installing the package
+# puts `check-no-secrets-in-argv` on PATH; pre-commit builds an isolated env that does
+# exactly that.
+[project.scripts]
+check-no-secrets-in-argv = "argv_guard.cli:main"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.400",
+    "pytest>=8",
+    "ruff>=0.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/argv_guard"]
+
+[tool.ruff]
+# Line length is not enforced (see the estate ruff baseline).
+line-length = 320
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "SIM", "C4", "RUF", "PERF101", "PERF401"]
+ignore = [
+    "E501",   # line length -- not enforced
+    "S101",   # assert -- legitimate in tests and invariants
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"

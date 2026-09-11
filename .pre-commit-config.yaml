@@ -1,0 +1,30 @@
+# This repo's OWN dev hooks. The hook it PUBLISHES to consumers is in
+# .pre-commit-hooks.yaml -- do not confuse the two.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-ast
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      # Dogfooding: this repo's own shell (if any) is held to the rule it publishes.
+      - id: check-no-secrets-in-argv
+        name: Check no secret reaches a spawned process's argv
+        entry: python -m argv_guard.cli
+        language: system
+        pass_filenames: true
