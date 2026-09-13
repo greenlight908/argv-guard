@@ -291,14 +291,26 @@ def offending_vars(line: str) -> list[str]:
 
 
 def is_shell_file(path: Path) -> bool:
-    """A `.sh`/`.bash` suffix, an embedded `.sh.`, or a shell shebang."""
+    """A `.sh`/`.bash` suffix, an embedded `.sh.`, or a shell shebang.
+
+    A file we CANNOT READ counts as shell, deliberately. Returning False there was the
+    nastiest of this family of bugs: an unreadable extensionless script was classified
+    "not shell" and dropped from the scan set before `scan()` ever saw it, so it could
+    not even be reported as unreadable -- it simply vanished, and the sweep called the
+    tree clean. Including it hands the problem to `scan()`, which records it in
+    `unreadable` and forces a non-clean verdict.
+
+    Erring toward INCLUSION is the right direction for a security check: the cost of a
+    wrongly-included file is one entry saying it could not be read, while the cost of a
+    wrongly-excluded one is a credential nobody ever looked for.
+    """
     if path.suffix in {".sh", ".bash"} or ".sh." in path.name:
         return True
     try:
         with path.open("rb") as handle:
             first = handle.readline(200).decode("utf-8", "replace")
     except OSError:
-        return False
+        return True
     return first.startswith("#!") and ("sh" in first or "bash" in first)
 
 

@@ -8,6 +8,7 @@ a message -- and each real-world shape that fooled an earlier draft has a case o
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -405,3 +406,44 @@ class TestAnUnreadableFileIsNotACleanFile:
 
         assert [f.var for f in result.findings] == ["API_TOKEN"]
         assert result.trustworthy is False
+
+
+class TestAnUndeterminableFileIsIncluded:
+    """`is_shell_file` erring toward EXCLUSION was the nastiest bug of this family.
+
+    An unreadable extensionless script was classified "not shell" and dropped from the
+    scan set before `scan()` saw it — so it could not even be reported as unreadable. It
+    simply vanished and the sweep called the tree clean. Every other blind spot at least
+    left a trace; this one erased the file.
+    """
+
+    def test_an_unreadable_extensionless_file_is_treated_as_shell(self, tmp_path: Path):
+        path = tmp_path / "runme"  # no suffix — type can only come from the shebang
+        path.write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
+        path.chmod(0o000)
+        if os.access(path, os.R_OK):  # running as root: nothing is unreadable
+            pytest.skip("cannot make a file unreadable as this user")
+        try:
+            assert guard.is_shell_file(path) is True
+        finally:
+            path.chmod(0o644)
+
+    def test_it_therefore_reaches_scan_and_is_reported(self, tmp_path: Path):
+        """The point of including it: the problem surfaces instead of disappearing."""
+        path = tmp_path / "runme"
+        path.write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
+        path.chmod(0o000)
+        if os.access(path, os.R_OK):
+            pytest.skip("cannot make a file unreadable as this user")
+        try:
+            files = guard.shell_files([tmp_path])
+            assert path in files
+            assert guard.scan(files).trustworthy is False
+        finally:
+            path.chmod(0o644)
+
+    def test_the_control_a_readable_non_shell_is_still_excluded(self, tmp_path: Path):
+        """Inclusion must apply only to the undeterminable case, not to everything."""
+        path = tmp_path / "notes.txt"
+        path.write_text("just some prose\n", encoding="utf-8")
+        assert guard.is_shell_file(path) is False
