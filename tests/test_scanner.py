@@ -447,3 +447,48 @@ class TestAnUndeterminableFileIsIncluded:
         path = tmp_path / "notes.txt"
         path.write_text("just some prose\n", encoding="utf-8")
         assert guard.is_shell_file(path) is False
+
+
+class TestAWrapperFunctionIsAlsoASpawner:
+    """A local function that wraps a spawner defeats a name-matching scanner entirely.
+
+    Found in the wild, in a script this very scanner had just certified clean::
+
+        paperless_curl() { curl --resolve "host:443:$IP" "$@"; }
+        ...
+        paperless_curl -s -H "Authorization: Token $PAPERLESS_API_TOKEN" "$URL"
+
+    `"$@"` forwards the header verbatim, so the token reached curl's argv exactly as if
+    curl had been named directly — but no call site contained a spawner word, so all
+    three sites read clean. The name even CONTAINS "curl" and still did not match, since
+    there it is preceded by a word character rather than sitting at command position.
+    """
+
+    WRAPPER = 'paperless_curl() {\n    curl --resolve "h:443:$IP" "$@"\n}\n'
+
+    def test_the_wrapper_is_recognised(self):
+        assert "paperless_curl" in guard.spawner_wrappers(self.WRAPPER)
+
+    def test_a_call_to_the_wrapper_leaks(self):
+        text = self.WRAPPER + 'paperless_curl -H "Authorization: Token $API_TOKEN" "$URL"\n'
+        findings = guard.scan_text(text, Path("scan.sh"))
+        assert [f.var for f in findings] == ["API_TOKEN"]
+
+    def test_the_name_alone_is_not_enough(self):
+        """The control that matters: a function that does NOT spawn must not become a
+        spawner just because something is passed to it, or every helper taking a token
+        becomes a finding and the check gets deleted for crying wolf."""
+        text = 'remember_token() {\n    STORED="$1"\n}\nremember_token "$API_TOKEN"\n'
+        assert guard.spawner_wrappers(text) == frozenset()
+        assert guard.scan_text(text, Path("x.sh")) == []
+
+    def test_a_wrapper_of_a_wrapper_is_caught(self):
+        """Resolved to a fixpoint, so one more layer of indirection does not hide it."""
+        text = self.WRAPPER + 'poll() {\n    paperless_curl -s "$@"\n}\n' + 'poll -H "Authorization: Token $API_TOKEN"\n'
+        assert {"paperless_curl", "poll"} <= guard.spawner_wrappers(text)
+        assert [f.var for f in guard.scan_text(text, Path("x.sh"))] == ["API_TOKEN"]
+
+    def test_the_sanctioned_fix_inside_a_wrapper_stays_clean(self):
+        """The remedy — inject the credential in the wrapper, on stdin — must pass."""
+        text = 'paperless_curl() {\n    printf \'header = "Authorization: Token %s"\\n\' "$API_TOKEN" \\\n        | curl --resolve "h:443:$IP" --config - "$@"\n}\npaperless_curl -s "$URL"\n'
+        assert guard.scan_text(text, Path("x.sh")) == []

@@ -22,7 +22,7 @@ printf 'url = "%s"\n' "https://api.example.com/bot$BOT_TOKEN/send" \
 ```yaml
 repos:
   - repo: https://github.com/greenlight908/argv-guard
-    rev: v0.2.1
+    rev: v0.3.0
     hooks:
       - id: check-no-secrets-in-argv
 ```
@@ -44,6 +44,12 @@ shape is data flow from a secret source into argv, which needs analysis a pre-co
 has no business doing. The naming convention is the only static signal available, so this
 fails loud and makes every exception explicit rather than trying to be clever and quietly
 missing cases.
+
+It also resolves **local wrapper functions**. A script that defines
+`api_curl() { curl --resolve … "$@"; }` and then calls
+`api_curl -H "Authorization: Token $TOKEN"` puts the token in curl's argv just as surely
+as naming curl directly — `"$@"` forwards it verbatim — so calls to such a function count
+as spawns. Resolved to a fixpoint, so a wrapper around a wrapper is caught too.
 
 Crucially it judges **each pipeline stage separately**, so the sanctioned fix above stays
 green: the `printf` stage has a secret but spawns nothing, and the `curl` stage spawns but

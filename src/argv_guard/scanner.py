@@ -129,6 +129,56 @@ DEFAULT_SKIP_DIRS = frozenset(
 )
 
 
+# A shell function definition: `name() {` or `function name {`.
+_FUNC_DEF_RE = re.compile(r"^[ \t]*(?:function[ \t]+)?([A-Za-z_]\w*)[ \t]*(?:\(\))?[ \t]*\{")
+
+
+def spawner_wrappers(text: str) -> frozenset[str]:
+    """Names of local functions that spawn a process, so CALLS to them count too.
+
+    A wrapper defeats a name-matching scanner completely, and this was found in the
+    wild: a script defined
+
+        paperless_curl() { curl --resolve "host:443:$IP" "$@"; }
+
+    and then called it with `-H "Authorization: Token $TOKEN"` at three sites. The token
+    reached curl's argv exactly as if curl had been named directly -- `"$@"` forwards it
+    verbatim -- but no call site contained a spawner word, so every one read clean. Note
+    the name even CONTAINS "curl" and still did not match, because `curl` there is
+    preceded by a word character rather than being at command position.
+
+    Resolved to a fixpoint, so a wrapper around a wrapper is caught too. Body extent is
+    tracked by brace depth, which is a heuristic like the rest of this module: a `{` or
+    `}` inside a string counts, which can end a body early. Erring that way only ever
+    loses a wrapper (a false negative already present today), never invents one.
+    """
+    wrappers: set[str] = set()
+    for _ in range(3):  # fixpoint: wrappers of wrappers of wrappers
+        before = len(wrappers)
+        extra = "|".join(re.escape(w) for w in wrappers)
+        body_spawner = re.compile(rf"{_SPAWNER_RE.pattern}|(?:^|[|;&(\"']|\s)(?:{extra})\b") if wrappers else _SPAWNER_RE
+        current: str | None = None
+        depth = 0
+        body: list[str] = []
+        for raw in text.splitlines():
+            if current is None:
+                match = _FUNC_DEF_RE.match(raw)
+                if match:
+                    current = match.group(1)
+                    depth = raw.count("{") - raw.count("}")
+                    body = [raw]
+                continue
+            body.append(raw)
+            depth += raw.count("{") - raw.count("}")
+            if depth <= 0:
+                if body_spawner.search(strip_comment("\n".join(body))):
+                    wrappers.add(current)
+                current = None
+        if len(wrappers) == before:
+            break
+    return frozenset(wrappers)
+
+
 def is_secret_name(name: str) -> bool:
     """Does this variable name read as a credential?"""
     upper = name.upper()
@@ -272,8 +322,13 @@ def pipe_segments(code: str) -> list[str]:
     return segments
 
 
-def offending_vars(line: str) -> list[str]:
-    """Credential-shaped variables in the argv of a process-spawning pipeline stage."""
+def offending_vars(line: str, wrappers: frozenset[str] = frozenset()) -> list[str]:
+    """Credential-shaped variables in the argv of a process-spawning pipeline stage.
+
+    `wrappers` are local function names that themselves spawn a process (see
+    `spawner_wrappers`); a call to one puts its arguments in a real process's argv just
+    as surely as naming the command directly.
+    """
     # The waiver must be a REAL trailing comment, so it is looked for in the tail that
     # comment-stripping removes -- not anywhere on the raw line. Otherwise merely quoting
     # the pragma text (documentation does exactly that) silences a genuine leak beside it.
@@ -282,9 +337,13 @@ def offending_vars(line: str) -> list[str]:
         return []
     if not code:
         return []
+    spawner_re = _SPAWNER_RE
+    if wrappers:
+        names = "|".join(re.escape(w) for w in sorted(wrappers))
+        spawner_re = re.compile(rf"""{_SPAWNER_RE.pattern}|(?:^|[|;&("']|\s)(?:{names})\b""")
     found: set[str] = set()
     for segment in pipe_segments(code):
-        if not _SPAWNER_RE.search(segment):
+        if not spawner_re.search(segment):
             continue
         found.update(n for n in _VAR_RE.findall(segment) if is_secret_name(n))
     return sorted(found)
@@ -383,8 +442,13 @@ class Finding:
 
 
 def scan_text(text: str, path: Path) -> list[Finding]:
-    """Findings in one script's source. The pure core -- no filesystem, no process."""
-    return [Finding(path, number, var) for number, line in logical_lines(text) for var in offending_vars(line)]
+    """Findings in one script's source. The pure core -- no filesystem, no process.
+
+    Wrappers are resolved per FILE, before any line is judged: a function defined at the
+    bottom of a script still makes calls at the top count.
+    """
+    wrappers = spawner_wrappers(text)
+    return [Finding(path, number, var) for number, line in logical_lines(text) for var in offending_vars(line, wrappers)]
 
 
 class ScanResult(NamedTuple):

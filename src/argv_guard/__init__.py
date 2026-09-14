@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 from .scanner import (
     Finding,
@@ -15,6 +15,7 @@ from .scanner import (
     scan,
     scan_text,
     shell_files,
+    spawner_wrappers,
     strip_comment,
 )
 
@@ -30,5 +31,6 @@ __all__ = [
     "scan",
     "scan_text",
     "shell_files",
+    "spawner_wrappers",
     "strip_comment",
 ]

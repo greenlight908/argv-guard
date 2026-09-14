@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "argv-guard"
-version = "0.2.1"
+version = "0.3.0"
 description = "Pre-commit hook: fail if a secret-shaped variable reaches a spawned process's argv in a shell script."
 readme = "README.md"
 requires-python = ">=3.11"
