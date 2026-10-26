@@ -30,6 +30,13 @@ repos:
       # Dogfooding: this repo's own shell (if any) is held to the rule it publishes.
       - id: check-no-secrets-in-argv
         name: Check no secret reaches a spawned process's argv
-        entry: python -m argv_guard.cli
+        entry: uv run check-no-secrets-in-argv
         language: system
         pass_filenames: true
+      # Through the project venv so it resolves the same pyright as CI (R1).
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false
