@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices"],
+  "description": "GitHub-hosted, so the hosted Renovate app runs it (the Forgejo repos inherit the h02 bot's config instead). config:best-practices pins GitHub Actions and images to digests.",
+  "minimumReleaseAge": "7 days",
+  "packageRules": [
+    {
+      "description": "Do not touch requires-python in pyproject.toml (a minimum constraint, not a pin)",
+      "matchPackageNames": ["python"],
+      "matchManagers": ["pep621"],
+      "enabled": false
+    }
+  ]
+}
