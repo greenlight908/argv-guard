@@ -3,7 +3,13 @@
   "extends": ["config:best-practices"],
   "description": "GitHub-hosted, so the hosted Renovate app runs it (the Forgejo repos inherit the h02 bot's config instead). config:best-practices pins GitHub Actions and images to digests.",
   "minimumReleaseAge": "7 days",
+  "platformAutomerge": false,
   "packageRules": [
+    {
+      "description": "Automerge non-major updates once EVERY check on the PR is green; majors still wait for a human. platformAutomerge is false so Renovate merges itself after reading all check results, rather than handing off to GitHub auto-merge, which waits only on branch-protection required checks (unavailable on a free-plan private repo) and so could merge a red PR. The Renovate analogue of Dependabot's documented auto-merge workflow (dependabot/fetch-metadata + gh pr merge --auto on semver-minor/patch).",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "automerge": true
+    },
     {
       "description": "Do not touch requires-python in pyproject.toml (a minimum constraint, not a pin)",
       "matchPackageNames": ["python"],
